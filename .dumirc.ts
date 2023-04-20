@@ -17,7 +17,7 @@ export default defineConfig({
   },
   outputPath: '.doc',
   exportStatic: {},
-  base: isProdSite ? '/antd-token-previewer/' : '/',
-  publicPath: isProdSite ? '/antd-token-previewer/' : '/',
+  base: '/mirror/antd-token-previewer',
+  publicPath: '/mirror/antd-token-previewer/',
   hash: true,
 });
