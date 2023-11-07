@@ -1,0 +1,101 @@
+name: Docker Sites
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@master
+
+      - uses: actions/setup-node@v1
+        with:
+          node-version: '12'
+
+      - name: cache package-lock.json
+        uses: actions/cache@v2
+        with:
+          path: package-temp-dir
+          key: lock-${{ github.sha }}
+
+      - name: create package-lock.json
+        run: npm i --package-lock-only
+
+      - name: hack for singe file
+        run: |
+          if [ ! -d "package-temp-dir" ]; then
+            mkdir package-temp-dir
+          fi
+          cp package-lock.json package-temp-dir
+
+      - name: cache node_modules
+        id: node_modules_cache_id
+        uses: actions/cache@v2
+        with:
+          path: node_modules
+          key: node_modules-${{ hashFiles('**/package-temp-dir/package-lock.json') }}
+
+      - name: install
+        if: steps.node_modules_cache_id.outputs.cache-hit != 'true'
+        run: npm ci
+
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@master
+
+      - name: restore cache from package-lock.json
+        uses: actions/cache@v2
+        with:
+          path: package-temp-dir
+          key: lock-${{ github.sha }}
+
+      - name: restore cache from node_modules
+        uses: actions/cache@v2
+        with:
+          path: node_modules
+          key: node_modules-${{ hashFiles('**/package-temp-dir/package-lock.json') }}
+
+      - name: compile
+        run: npm run compile
+
+      - name: docs
+        run: npm run docs:build
+      - name: zip zite
+        uses: montudor/action-zip@v1
+        with:
+          args: zip -qq -r ant-token-previwer-sites.zip .doc
+
+      - name: Generate release tag
+        id: tag
+        run: |
+          echo "::set-output name=release_tag::sites_$(date +"%Y.%m.%d_%H_%M_%S")"
+
+      - name: GH Release
+        # You may pin to the exact commit or the version.
+        # uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844
+        uses: softprops/action-gh-release@v0.1.15
+        with:
+          tag_name: ${{ steps.tag.outputs.release_tag }}
+          files: ant-token-previwer-sites.zip
+
+      - name: Build and push Docker images
+        uses: docker/build-push-action@v1
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+          repository: xbeeant/ant-token-previwer
+          tags: latest
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./_site
+          force_orphan: true
+
+    needs: setup
+
